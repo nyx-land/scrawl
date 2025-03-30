@@ -13,12 +13,14 @@
 (defmethod parse-document ((document-format scrawl)
                            (input string))
   (declare (ignore document-format))
-  (scrawl.parser:parse input))
+  (scrawl.parser:parse
+   (make-string-input-stream input)))
 
 (defmethod parse-document ((document-format scrawl)
                            (input pathname))
   (declare (ignore document-format))
-  (scrawl.parser:parse (uiop:read-file-string input)))
+  (with-open-file (stream input)
+    (scrawl.parser:parse stream)))
 
 (defmethod emit-document ((document-format scrawl)
                           (document common-doc:document-node)
