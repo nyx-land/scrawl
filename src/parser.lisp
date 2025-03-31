@@ -25,6 +25,7 @@
 (defconstant +sexp-open+ #\[)
 (defconstant +sexp-close+ #\])
 
+(defvar *whitespace* '(#\space #\newline #\tab))
 (defvar *previous-readtables* nil)
 (defvar *tags*
   (alexandria:alist-hash-table
@@ -45,14 +46,27 @@
   (read-char input nil nil t)
   input)
 
+;;;; parsers ----------------------------------------------------------
+
+(defun whitespace-p ()
+  (.is 'member *whitespace*))
+
 (defun tag-p (c)
   (let ((tag (gethash c *tags*)))
-    (if tag tag 'paragraph)))
+    (if tag tag c)))
 
 (defun read-tag ()
+  ;; (.let* ((tag-x (.item))
+  ;;         (_ (.item)))
+  ;;   (print tag-x)
+  ;;   (print _)
+  ;;   (if (member _ *whitespace*)
+  ;;       (.identity (tag-p tag-x))
+  ;;       (.identity tag-x)))
   (.bind (.item)
          (lambda (input)
-           (.identity (tag-p input)))))
+           (.identity (tag-p input))))
+  )
 
 (defun read-descend ()
   (.bind (.is #'char= +sexp-open+)
@@ -85,7 +99,13 @@
 (defun read-sexp ()
   (.let* ((tag-x (read-tag))
           (body (read-next)))
-    (.identity (list tag-x body))))
+    (.identity (cons tag-x body))))
+
+;;;; interface --------------------------------------------------------
+
+(defun read-scrawl-string (string)
+  (parse (read-sexp)
+         (subseq string 1)))
 
 (defun read-scrawl (stream char)
   (declare (ignore char))
