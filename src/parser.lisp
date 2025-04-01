@@ -79,6 +79,12 @@
 (defun read-inline ()
   ())
 
+(defun sexp-open ()
+  (.is #'char= +sexp-open+))
+
+(defun sexp-close ()
+  (.is #'char= +sexp-close+))
+
 (defun sexp-atom (input)
   (if input
       (if (= 1 (length input))
@@ -100,12 +106,6 @@
 (defun read-delimiter (stream char)
   (declare (ignore stream char))
   (error "Unmatched bracket"))
-
-(defun sexp-open ()
-  (.is #'char= +sexp-open+))
-
-(defun sexp-close ()
-  (.is #'char= +sexp-close+))
 
 (defun read-sexp ()
   (.progn
