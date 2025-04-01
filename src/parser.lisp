@@ -18,6 +18,7 @@
    :table
    :section
    :document
+   :paragraph
    :children))
 
 (in-package :scrawl.parser)
@@ -52,9 +53,9 @@
 
 (defun tag-p (c)
   (case c
-    (#\# 'section)
-    (#\- 'unordered-list)
-    (#\+ 'ordered-list)
+    (#\# '(section))
+    (#\- '(unordered-list))
+    (#\+ '(ordered-list))
     (t `(text-node ,c))))
 
 (defun inline-p (c)
