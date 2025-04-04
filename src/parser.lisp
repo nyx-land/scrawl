@@ -33,6 +33,15 @@
 
 (defparameter *ipsum* (lorem-ipsum:paragraphs 5))
 
+;;;; utils ------------------------------------------------------------
+
+(defmacro tagcase (&body tags)
+  `(.or ,@(mapcar (lambda (x)
+                    `(.bind (.is #'char= ,(car x))
+                            (lambda (c)
+                              (.identity ,(cadr x)))))
+                  tags)))
+
 ;;;; smug methods -----------------------------------------------------
 
 (defmethod input-empty-p ((input stream))
