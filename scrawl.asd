@@ -1,5 +1,5 @@
 (defsystem "scrawl"
-  :depends-on ("common-doc" "smug" "alexandria")
+  :depends-on ("common-doc" "parcom" "alexandria")
   :components ((:module "src"
                 :components
                 ((:file "parser")
