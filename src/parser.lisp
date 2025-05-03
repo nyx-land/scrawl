@@ -101,8 +101,9 @@
 (defmacro make-tags (&body body)
   `(alt ,@(mapcar (lambda (x)
                     `(<*> (read-tag ,(car x) ,(cadr x))
-                          ,@(cddr x)
-                          (sexp-bd)))
+                          ,@(if (cddr x)
+                                (cddr x)
+                                '((sexp-bd)))))
                   body)
         (string-take)))
 
@@ -135,10 +136,11 @@
                         (not (cswitch #\[ #\] #\newline)))))
       (consume #'whitespace-p)))
 
-(defun read-unordered-list ()
-  )
-
-(defun read-ordered-list ())
+(defun read-list ()
+  (many-x (<*> (ok 'make-list-item)
+               (alt (sexp-read)
+                    (string-take)))
+          'list))
 
 (defun string-take ()
   (<*> (ok 'make-text)
@@ -163,7 +165,7 @@
   (make-tags
     (:italic (char #\/))
     (:bold (char #\*))
-    (:code (char #\~))
+    (:code (char #\%))
     (:underline (char #\_))
     (:strikethrough (char #\+))
     (:section
@@ -175,14 +177,12 @@
     (:code-block
      (char #\$)
      (word))
-    ;; (:unordered-list
-    ;;  (char #\-)
-    ;;  (read-unordered-list))
-    ;; (:ordered-list
-    ;;  (char #\=)
-    ;;  (read-ordered-list))
-    )
-  )
+    (:unordered-list
+     (char #\-)
+     (read-list))
+    (:ordered-list
+     (char #\=)
+     (read-list))))
 
 (defun sexp-read ()
   (between
