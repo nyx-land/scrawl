@@ -57,7 +57,13 @@
    :make-code-block
    :make-text
    :make-web-link
-   :make-section))
+   :make-section
+   :make-unordered-list
+   :make-ordered-list
+   :make-definition-list
+   :make-list-item
+   :make-definition
+   :make-document))
 
 (in-package :scrawl.parser)
 
@@ -72,25 +78,6 @@
 ;;(defparameter *ipsum* (lorem-ipsum:paragraphs 5))
 
 ;;;; utils ------------------------------------------------------------
-
-(in-package :parcom)
-
-;; TODO: this is such a stupid hack there's got to be a better way
-(declaim (ftype (function (maybe-parse) always-parse) many-ls))
-(defun many-ls (parser)
-  "Parse 0 or more occurrences of a `parser'."
-  (lambda (input)
-    (declare (optimize (speed 3)))
-    (labels ((recurse (acc in)
-               (let ((res (funcall parser in)))
-                 (etypecase res
-                   (failure (ok in acc))
-                   (parser (recurse (cons (parser-value res) acc)
-                                    (parser-input res)))))))
-      (fmap (lambda (x) (cons 'list x))
-            (fmap #'nreverse (recurse '() input))))))
-
-(in-package :scrawl.parser)
 
 (defun read-string (stream)
   (let ((out (make-string-output-stream)))
@@ -114,9 +101,8 @@
 (defmacro make-tags (&body body)
   `(alt ,@(mapcar (lambda (x)
                     `(<*> (read-tag ,(car x) ,(cadr x))
-                          ,@(if (cddr x)
-                                (cddr x)
-                                '((sexp-bd)))))
+                          ,@(cddr x)
+                          (sexp-bd)))
                   body)
         (string-take)))
 
@@ -132,6 +118,12 @@
 (defun ok (input)
   (<$ input (parcom:take 0)))
 
+(defun many-x (parser x)
+  (lambda (input)
+    (fmap (lambda (y)
+            (cons x y))
+          (funcall (many parser) input))))
+
 (defun word ()
   (take-while
    (lambda (c)
@@ -143,7 +135,9 @@
                         (not (cswitch #\[ #\] #\newline)))))
       (consume #'whitespace-p)))
 
-(defun read-unordered-list ())
+(defun read-unordered-list ()
+  )
+
 (defun read-ordered-list ())
 
 (defun string-take ()
@@ -154,8 +148,9 @@
                               (not (cswitch #\[ #\] #\newline))))))))
 
 (defun sexp-bd ()
-  (parcom::many-ls (alt (sexp-read)
-                        (string-take))))
+  (many-x (alt (sexp-read)
+               (string-take))
+          'list))
 
 (defun read-tag (name c)
   (<* (<$ (read-from-string
@@ -171,15 +166,15 @@
     (:code (char #\~))
     (:underline (char #\_))
     (:strikethrough (char #\+))
-    ;; (:section
-    ;;  (char #\#)
-    ;;  (read-title))
-    ;; (:web-link
-    ;;  (char #\@)
-    ;;  (word))
-    ;; (:code-block
-    ;;  (char #\$)
-    ;;  (word))
+    (:section
+     (char #\#)
+     (read-title))
+    (:web-link
+     (char #\@)
+     (word))
+    (:code-block
+     (char #\$)
+     (word))
     ;; (:unordered-list
     ;;  (char #\-)
     ;;  (read-unordered-list))
