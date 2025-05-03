@@ -17,7 +17,10 @@
    :between
    :parse
    :take-while
-   :consume)
+   :consume
+   :fmap
+   :take
+   :skip)
   (:import-from
    :common-doc
    :reference
@@ -70,11 +73,35 @@
 
 ;;;; utils ------------------------------------------------------------
 
-(defun sexp-end (c)
-  (char= c +sexp-close+))
+(in-package :parcom)
 
-(defun sexp-start (c)
-  (char= c +sexp-open+))
+;; TODO: this is such a stupid hack there's got to be a better way
+(declaim (ftype (function (maybe-parse) always-parse) many-ls))
+(defun many-ls (parser)
+  "Parse 0 or more occurrences of a `parser'."
+  (lambda (input)
+    (declare (optimize (speed 3)))
+    (labels ((recurse (acc in)
+               (let ((res (funcall parser in)))
+                 (etypecase res
+                   (failure (ok in acc))
+                   (parser (recurse (cons (parser-value res) acc)
+                                    (parser-input res)))))))
+      (fmap (lambda (x) (cons 'list x))
+            (fmap #'nreverse (recurse '() input))))))
+
+(in-package :scrawl.parser)
+
+(defun read-string (stream)
+  (let ((out (make-string-output-stream)))
+    (loop for line = (read-line stream nil :eof)
+          until (eq :eof line)
+          do (write-sequence line out))
+    (get-output-stream-string out)))
+
+(defun string-out (input)
+  (with-output-to-string (out nil :element-type 'base-char)
+    (write-sequence input out)))
 
 (defun parse-debug (parser input)
   (funcall parser (parcom:in input)))
@@ -84,17 +111,14 @@
    (make-instance 'common-html:html)
    object))
 
-(defmacro scrawl-tags (&body tags)
+(defmacro make-tags (&body body)
   `(alt ,@(mapcar (lambda (x)
-                    `(<*> (<* (<$ ',(read-from-string
-                                     (format nil "make-~a"
-                                             (symbol-name (car x))))
-                                  (alt ,(cadr x)
-                                       (parcom:string ,(format nil "~s" (car x)))))
-                              (consume #'whitespace-p))
-                          ,@(append (cddr x) '((sexp-body)))))
-                  tags)
-        (sexp-body)))
+                    `(<*> (read-tag ,(car x) ,(cadr x))
+                          ,@(if (cddr x)
+                                (cddr x)
+                                '((sexp-bd)))))
+                  body)
+        (string-take)))
 
 (defmacro cswitch (&body body)
   `(or ,@(mapcar (lambda (c) `(char= c ,c))
@@ -107,12 +131,6 @@
 
 (defun ok (input)
   (<$ input (parcom:take 0)))
-
-(defun take-string ()
-  (<*> (ok 'make-text)
-       (*> (peek (anybut +sexp-close+))
-           (take-while (lambda (c)
-                         (not (cswitch #\[ #\])))))))
 
 (defun word ()
   (take-while
@@ -128,43 +146,53 @@
 (defun read-unordered-list ())
 (defun read-ordered-list ())
 
-;; TODO: need to not have the lists be nested
-(defun read-tags ()
-  (scrawl-tags
-    (:section
-     (char #\#)
-     (read-title))
+(defun string-take ()
+  (<*> (ok 'make-text)
+       (<*> (ok 'string-out)
+            (*> (peek (anybut +sexp-close+))
+                (take-while (lambda (c)
+                              (not (cswitch #\[ #\] #\newline))))))))
+
+(defun sexp-bd ()
+  (parcom::many-ls (alt (sexp-read)
+                        (string-take))))
+
+(defun read-tag (name c)
+  (<* (<$ (read-from-string
+           (format nil "make-~(~a~)" name))
+          (alt c (parcom:string
+                  (format nil "~s" name))))
+      (consume #'whitespace-p)))
+
+(defun sexp-tags ()
+  (make-tags
     (:italic (char #\/))
     (:bold (char #\*))
-    (:web-link
-     (char #\@)
-     (word))
     (:code (char #\~))
-    (:code-block
-     (char #\$)
-     (word))
+    (:underline (char #\_))
+    (:strikethrough (char #\+))
+    ;; (:section
+    ;;  (char #\#)
+    ;;  (read-title))
+    ;; (:web-link
+    ;;  (char #\@)
+    ;;  (word))
+    ;; (:code-block
+    ;;  (char #\$)
+    ;;  (word))
     ;; (:unordered-list
     ;;  (char #\-)
     ;;  (read-unordered-list))
     ;; (:ordered-list
     ;;  (char #\=)
     ;;  (read-ordered-list))
-    (:underline (char #\_))
-    (:strikethrough (char #\+))))
+    )
+  )
 
-(defun sexp-body ()
-  (many (alt (read-sexp)
-             (take-string))))
-
-(defun sexp-meta ()
-  (<*> (read-tags)
-       (sexp-keys)
-       (sexp-body)))
-
-(defun read-sexp ()
+(defun sexp-read ()
   (between
    (char +sexp-open+)
-   (read-tags)
+   (sexp-tags)
    (char +sexp-close+)))
 
 ;;;; interface --------------------------------------------------------
@@ -173,11 +201,12 @@
   (:documentation "The parser interface")
   (:method ((input string) &optional char)
     (declare (ignore char))
-    (parse (read-sexp) input))
-  ;; (:method ((input stream) &optional char)
-  ;;   (declare (ignore char))
-  ;;   (parse (read-sexp) input))
-  )
+    (parse (sexp-read) input))
+  (:method ((input stream) &optional char)
+    (declare (ignore char))
+    (unread-char #\[ input)
+    (let ((string (read-string input)))
+      (parse (sexp-read) string))))
 
 (defmacro enable-scrawl ()
   '(eval-when (:compile-toplevel :load-toplevel :execute)
