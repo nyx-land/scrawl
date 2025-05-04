@@ -20,7 +20,8 @@
    :consume
    :fmap
    :take
-   :skip)
+   :skip
+   :opt)
   (:import-from
    :common-doc
    :reference
@@ -119,14 +120,15 @@
                                 (cddr x)
                                 '((sexp-bd)))))
                   body)
-        (sexp-bd)))
+        (*> (opt (char #\newline))
+            (sexp-bd))))
 
 (defmacro cswitch (&body body)
   `(or ,@(mapcar (lambda (c) `(char= c ,c))
                  body)))
 
 (defun whitespace-p (c)
-  (cswitch #\space #\tab #\newline #\return))
+  (cswitch #\space #\tab #\return))
 
 ;;;; parsers ----------------------------------------------------------
 
@@ -153,21 +155,30 @@
   (<*> (ok 'string-out)
        (take-sexp)))
 
+(defun read-text ()
+  (<*> (ok 'make-text)
+       (string-take)))
+
+(defun read-paragraph ()
+  (*> (parcom:string (format nil "~%~%"))
+      (<*> (ok 'make-paragraph)
+           (read-text))))
+
 (defun read-lisp ()
   (lambda (input)
     (fmap #'read-from-string
           (funcall (take-sexp) input))))
 
-(defun read-text ()
-  (<*> (ok 'make-text)
-       (string-take)))
-
-(defun parse-key ()
-  ())
+(defun parse-keypair ()
+  (<*> (ok 'cons)
+       (<* (*> (peek (char #\:))
+               (word))
+           (consume #'whitespace-p))
+       (word)))
 
 (defun read-pairs ()
   (<*> (ok 'list)
-       ()))
+       (parse-key)))
 
 (defun read-title ()
   (<* (*> (peek (anybut +sexp-close+))
@@ -186,6 +197,7 @@
 
 (defun sexp-bd ()
   (many-x (alt (sexp-read)
+               (read-paragraph)
                (read-text))
           'list))
 
@@ -198,6 +210,7 @@
 
 (defun sexp-tags ()
   (make-tags
+    (:paragraph (parcom:string (format nil "~%~%")))
     (:italic (char #\/))
     (:bold (char #\*))
     (:code (char #\%))
@@ -209,7 +222,9 @@
     (:block-quote (char #\<))
     (:section
      (char #\#)
-     (read-title))
+     (read-title)
+     (ok :children)
+     (sexp-bd))
     (:web-link
      (char #\@)
      (word))
