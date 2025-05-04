@@ -149,7 +149,7 @@
 (defun take-sexp ()
   (*> (peek (anybut +sexp-close+))
       (take-while (lambda (c)
-                    (not (cswitch #\[ #\] #\newline))))))
+                    (not (cswitch #\[ #\]))))))
 
 (defun string-take ()
   (<*> (ok 'string-out)
