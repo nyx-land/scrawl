@@ -49,12 +49,18 @@
    :code-block
    :web-link
    ;; constructors
+   :make-paragraph
+   :make-meta
    :make-bold
    :make-italic
    :make-underline
    :make-strikethrough
+   :make-subscript
+   :make-superscript
    :make-code
    :make-code-block
+   :make-block-quote
+   :make-inline-quote
    :make-text
    :make-web-link
    :make-section
@@ -63,7 +69,12 @@
    :make-definition-list
    :make-list-item
    :make-definition
-   :make-document))
+   :make-document
+   :make-table
+   :make-row
+   :make-cell
+   :make-image
+   :make-figure))
 
 (in-package :scrawl.parser)
 
@@ -99,13 +110,16 @@
    object))
 
 (defmacro make-tags (&body body)
-  `(alt ,@(mapcar (lambda (x)
+  `(alt (*> (alt (peek (char #\())
+                 (parcom:string ":lisp"))
+            (read-lisp))
+        ,@(mapcar (lambda (x)
                     `(<*> (read-tag ,(car x) ,(cadr x))
                           ,@(if (cddr x)
                                 (cddr x)
                                 '((sexp-bd)))))
                   body)
-        (string-take)))
+        (sexp-bd)))
 
 (defmacro cswitch (&body body)
   `(or ,@(mapcar (lambda (c) `(char= c ,c))
@@ -130,6 +144,31 @@
    (lambda (c)
      (not (whitespace-p c)))))
 
+(defun take-sexp ()
+  (*> (peek (anybut +sexp-close+))
+      (take-while (lambda (c)
+                    (not (cswitch #\[ #\] #\newline))))))
+
+(defun string-take ()
+  (<*> (ok 'string-out)
+       (take-sexp)))
+
+(defun read-lisp ()
+  (lambda (input)
+    (fmap #'read-from-string
+          (funcall (take-sexp) input))))
+
+(defun read-text ()
+  (<*> (ok 'make-text)
+       (string-take)))
+
+(defun parse-key ()
+  ())
+
+(defun read-pairs ()
+  (<*> (ok 'list)
+       ()))
+
 (defun read-title ()
   (<* (*> (peek (anybut +sexp-close+))
           (take-while (lambda (c)
@@ -139,19 +178,15 @@
 (defun read-list ()
   (many-x (<*> (ok 'make-list-item)
                (alt (sexp-read)
-                    (string-take)))
+                    (read-text)))
           'list))
 
-(defun string-take ()
-  (<*> (ok 'make-text)
-       (<*> (ok 'string-out)
-            (*> (peek (anybut +sexp-close+))
-                (take-while (lambda (c)
-                              (not (cswitch #\[ #\] #\newline))))))))
+(defun read-definitions ())
+(defun read-table ())
 
 (defun sexp-bd ()
   (many-x (alt (sexp-read)
-               (string-take))
+               (read-text))
           'list))
 
 (defun read-tag (name c)
@@ -168,6 +203,10 @@
     (:code (char #\%))
     (:underline (char #\_))
     (:strikethrough (char #\+))
+    (:superscript (parcom:string ":sup"))
+    (:subscript (parcom:string ":sub"))
+    (:inline-quote (char #\>))
+    (:block-quote (char #\<))
     (:section
      (char #\#)
      (read-title))
@@ -182,7 +221,27 @@
      (read-list))
     (:ordered-list
      (char #\=)
-     (read-list))))
+     (read-list))
+    (:definition
+     (char #\~)
+     (read-definitions))
+    (:table
+     (parcom:string ":tab")
+     (read-table))
+    (:image
+     (parcom:string ":img")
+     (word)
+     (ok :description)
+     (string-take))
+    (:figure
+     (parcom:string ":fig")
+     (<*> (ok 'make-image)
+          (word))
+     (read-text))
+    ;; (:meta
+    ;;  (parse-key)
+    ;;  (read-pairs))
+    ))
 
 (defun sexp-read ()
   (between
