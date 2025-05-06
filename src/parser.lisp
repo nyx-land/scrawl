@@ -8,7 +8,7 @@
    :alt
    :peek
    :any
-   :anybut
+   :any-but
    :many
    :<$
    :*>
@@ -159,7 +159,7 @@
                    (whitespace-p c)))))))
 
 (defun take-sexp ()
-  (*> (peek (anybut +sexp-close+))
+  (*> (peek (any-but +sexp-close+))
       (take-while (lambda (c)
                     (not (cswitch #\[ #\]))))))
 
@@ -186,7 +186,7 @@
       (word)))
 
 (defun parse-keypair ()
-  (*> (peek (anybut +sexp-close+))
+  (*> (peek (any-but +sexp-close+))
       (<*> (ok 'cons)
            (<* (<*> (ok 'read-from-string)
                     (word))
@@ -204,7 +204,7 @@
                'list)))
 
 (defun read-title ()
-  (<* (*> (peek (anybut +sexp-close+))
+  (<* (*> (peek (any-but +sexp-close+))
           (take-while (lambda (c)
                         (not (cswitch #\[ #\] #\newline)))))
       (consume #'whitespace-p)))
