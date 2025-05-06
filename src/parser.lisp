@@ -141,10 +141,22 @@
             (cons x y))
           (funcall (many parser) input))))
 
+;; TODO: inserting `FORMAT' is hacky
 (defun word ()
-  (take-while
-   (lambda (c)
-     (not (whitespace-p c)))))
+  (alt (<*> (ok 'format)
+            (ok nil)
+            (ok "~s")
+            (between (char #\")
+                     (take-while
+                      (lambda (c)
+                        (not (cswitch #\"))))
+                     (char #\")))
+       #'parcom:integer
+       #'parcom:float
+       (take-while
+        (lambda (c)
+          (not (or (cswitch #\[ #\])
+                   (whitespace-p c)))))))
 
 (defun take-sexp ()
   (*> (peek (anybut +sexp-close+))
@@ -169,16 +181,27 @@
     (fmap #'read-from-string
           (funcall (take-sexp) input))))
 
+(defun read-reference ()
+  (*> (parcom:string "#:")
+      (word)))
+
 (defun parse-keypair ()
-  (<*> (ok 'cons)
-       (<* (*> (peek (char #\:))
-               (word))
-           (consume #'whitespace-p))
-       (word)))
+  (*> (peek (anybut +sexp-close+))
+      (<*> (ok 'cons)
+           (<* (<*> (ok 'read-from-string)
+                    (word))
+               (consume #'whitespace-p))
+           (<* (<*> (ok 'read-from-string)
+                    (word))
+               (consume #'whitespace-p)))))
 
 (defun read-pairs ()
-  (<*> (ok 'list)
-       (parse-key)))
+  (<*> (ok 'make-meta)
+       (many-x (alt (parse-keypair)
+                    (sexp-read)
+                    (read-paragraph)
+                    (read-text))
+               'list)))
 
 (defun read-title ()
   (<* (*> (peek (anybut +sexp-close+))
