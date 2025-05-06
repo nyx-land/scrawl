@@ -246,6 +246,9 @@
                   (format nil "~s" name))))
       (consume #'whitespace-p)))
 
+;; TODO: this protocol for parsing different tags is very hacky
+;; needs to have a more extensible way of switching between
+;; tables depending on the context
 (defun sexp-args ()
   (alt (*> (alt (parcom:string ":meta")
                 (parcom:string ":metadata"))
