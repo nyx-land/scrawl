@@ -169,8 +169,9 @@
        #'parcom:float
        (take-while
         (lambda (c)
-          (not (or (cswitch #\[ #\])
-                   (whitespace-p c)))))))
+          (not (cswitch #\[ #\]
+                 #\space #\return
+                 #\tab #\newline))))))
 
 (defun take-sexp ()
   (*> (peek (any-but +sexp-close+))
@@ -245,6 +246,21 @@
                   (format nil "~s" name))))
       (consume #'whitespace-p)))
 
+(defun sexp-args ()
+  (alt (*> (alt (parcom:string ":meta")
+                (parcom:string ":metadata"))
+           (consume #'whitespace-p)
+           (<*> (ok :metadata)
+                (read-pairs)))
+       (*> (alt (parcom:string ":ref")
+                (parcom:string ":reference"))
+           (consume #'whitespace-p)
+           (<*> (ok :reference)
+                (word)))
+       (<*> (ok :children)
+            (*> (opt (char #\newline))
+                (sexp-bd)))))
+
 (defun sexp-tags ()
   (make-tags
     (:paragraph (parcom:string (format nil "~%~%")))
@@ -295,10 +311,10 @@
     ;;  (read-pairs))
     ))
 
-(defun sexp-read ()
+(defun sexp-read (&optional (parser (sexp-tags)))
   (between
    (char +sexp-open+)
-   (sexp-tags)
+   parser
    (char +sexp-close+)))
 
 ;;;; interface --------------------------------------------------------
