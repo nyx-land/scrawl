@@ -132,6 +132,20 @@
 
 ;;;; parsers ----------------------------------------------------------
 
+(defun flatten (tree)
+  (cond ((null tree) nil)
+        ((consp (car tree))
+         (concatenate 'list
+                      (car tree)
+                      (flatten (cdr tree))))
+        (t (cons (car tree)
+                 (flatten (cdr tree))))))
+
+(defun interleave (parser)
+  (lambda (input)
+    (fmap #'flatten
+          (funcall parser input))))
+
 (defun ok (input)
   (<$ input (parcom:take 0)))
 
