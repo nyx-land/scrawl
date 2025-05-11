@@ -99,7 +99,7 @@
     (get-output-stream-string out)))
 
 (defun string-out (input)
-  (with-output-to-string (out nil :element-type 'base-char)
+  (with-output-to-string (out nil)
     (write-sequence input out)))
 
 (defun parse-debug (parser input)
@@ -110,25 +110,12 @@
    (make-instance 'common-html:html)
    object))
 
-(defmacro make-tags (&body body)
-  `(alt (*> (alt (peek (char #\())
-                 (parcom:string ":lisp"))
-            (read-lisp))
-        ,@(mapcar (lambda (x)
-                    `(<*> (read-tag ,(car x) ,(cadr x))
-                          ,@(if (cddr x)
-                                (cddr x)
-                                '((sexp-bd)))))
-                  body)
-        (*> (opt (char #\newline))
-            (sexp-bd))))
-
-(defmacro cswitch (&body body)
+(defmacro cswitch (&body chars)
   `(or ,@(mapcar (lambda (c) `(char= c ,c))
-                 body)))
+                 chars)))
 
 (defun whitespace-p (c)
-  (cswitch #\space #\tab #\return))
+  (cswitch #\space #\tab #\return #\newline))
 
 ;;;; parsers ----------------------------------------------------------
 
@@ -157,16 +144,11 @@
 
 ;; TODO: inserting `FORMAT' is hacky
 (defun word ()
-  (alt (<*> (ok 'format)
-            (ok nil)
-            (ok "~s")
-            (between (char #\")
-                     (take-while
-                      (lambda (c)
-                        (not (cswitch #\"))))
-                     (char #\")))
-       #'parcom:integer
-       #'parcom:float
+  (alt (between (char #\")
+                (take-while
+                 (lambda (c)
+                   (not (cswitch #\"))))
+                (char #\"))
        (take-while
         (lambda (c)
           (not (cswitch #\[ #\]
@@ -187,7 +169,8 @@
        (string-take)))
 
 (defun read-paragraph ()
-  (*> (parcom:string (format nil "~%~%"))
+  (*> (parcom:string
+       (string-out (format nil "~%~%")))
       (<*> (ok 'make-paragraph)
            (read-text))))
 
@@ -203,25 +186,25 @@
 (defun parse-keypair ()
   (*> (peek (any-but +sexp-close+))
       (<*> (ok 'cons)
-           (<* (<*> (ok 'read-from-string)
-                    (word))
+           (<* (word)
                (consume #'whitespace-p))
-           (<* (<*> (ok 'read-from-string)
-                    (word))
+           (<* (word)
                (consume #'whitespace-p)))))
 
 (defun read-pairs ()
   (<*> (ok 'make-meta)
-       (many-x (alt (parse-keypair)
-                    (sexp-read)
-                    (read-paragraph)
-                    (read-text))
+       (many-x (parse-keypair)
                'list)))
 
 (defun read-title ()
-  (<* (*> (peek (any-but +sexp-close+))
-          (take-while (lambda (c)
-                        (not (cswitch #\[ #\] #\newline)))))
+  (<* (*> (*> (peek (any-but +sexp-close+))
+              (peek (any-but +sexp-open+))
+              (peek (any-but #\newline)))
+          (<*> (ok 'make-text)
+               (<*> (ok 'string-out)
+                    (take-while
+                     (lambda (c)
+                       (not (cswitch #\[ #\] #\newline)))))))
       (consume #'whitespace-p)))
 
 (defun read-list ()
@@ -233,92 +216,142 @@
 (defun read-definitions ())
 (defun read-table ())
 
+;;;; ------------------------------------------------------------------
+;;;; tag parsers ------------------------------------------------------
+
+(defun read-tag (name alt-tag)
+  (if alt-tag
+      (alt (if (keywordp alt-tag)
+               (parcom:string
+                (string-out
+                 (format nil "~(~s~)" alt-tag)))
+               alt-tag)
+           (parcom:string
+            (string-out
+             (format nil "~s" name))))
+      (opt
+       (parcom:string
+        (string-out
+         (format nil "~s" name))))))
+
+(defmacro deftag (name alt-tag node-p &body body)
+  `(*> (read-tag ,name ,alt-tag)
+       (consume #'whitespace-p)
+       ,(if node-p
+            `(<*> (ok 'apply)
+                  (ok '(function make-instance))
+                  (ok ',(read-from-string
+                         (format nil "'~a" name)))
+                  ,@body)
+            `(<*> (ok ',name)
+                  ,@body))))
+
+(defmacro with-args (&body body)
+  `(alt ,@(mapcar
+           (lambda (x)
+             (cond ((eq (car x) '&key)
+                    `(many-x
+                      (with-args ,@(cdr x))
+                      'list))
+                   ((keywordp (car x))
+                    `(sexp-read
+                      (deftag ,(car x) ,(cadr x) nil
+                        ,@(cddr x))))
+                   (t `(deftag ,(intern
+                                 (symbol-name (car x))
+                                 :keyword)
+                           nil nil
+                         ,@(cddr x)))))
+           body)))
+
+(defmacro with-nodes (&body body)
+  `(alt ,@(mapcar
+           (lambda (x)
+             (destructuring-bind
+                 (name alt-tag &rest node-body) x
+               `(sexp-read
+                 (deftag ,name ,alt-tag t
+                   (with-args
+                     ,@node-body)))))
+           body)))
+
 (defun sexp-bd ()
   (many-x (alt (sexp-read)
                (read-paragraph)
                (read-text))
           'list))
 
-(defun read-tag (name c)
-  (<* (<$ (read-from-string
-           (format nil "make-~(~a~)" name))
-          (alt c (parcom:string
-                  (format nil "~s" name))))
-      (consume #'whitespace-p)))
-
 ;; TODO: this protocol for parsing different tags is very hacky
 ;; needs to have a more extensible way of switching between
 ;; tables depending on the context
-(defun sexp-args ()
-  (alt (*> (alt (parcom:string ":meta")
-                (parcom:string ":metadata"))
-           (consume #'whitespace-p)
-           (<*> (ok :metadata)
-                (read-pairs)))
-       (*> (alt (parcom:string ":ref")
-                (parcom:string ":reference"))
-           (consume #'whitespace-p)
-           (<*> (ok :reference)
-                (word)))
-       (<*> (ok :children)
-            (*> (opt (char #\newline))
-                (sexp-bd)))))
+;; (defun sexp-args ()
+;;   (with-args
+;;     (:metadata
+;;      (parcom:string ":meta")
+;;      (read-pairs))
+;;     (:reference
+;;      (parcom:string ":ref")
+;;      (word))))
 
-(defun sexp-tags ()
-  (make-tags
-    (:paragraph (parcom:string (format nil "~%~%")))
-    (:italic (char #\/))
-    (:bold (char #\*))
-    (:code (char #\%))
-    (:underline (char #\_))
-    (:strikethrough (char #\+))
-    (:superscript (parcom:string ":sup"))
-    (:subscript (parcom:string ":sub"))
-    (:inline-quote (char #\>))
-    (:block-quote (char #\<))
-    (:section
-     (char #\#)
-     (read-title)
-     (ok :children)
-     (sexp-bd))
-    (:web-link
-     (char #\@)
-     (word))
-    (:code-block
-     (char #\$)
-     (word))
-    (:unordered-list
-     (char #\-)
-     (read-list))
-    (:ordered-list
-     (char #\=)
-     (read-list))
-    (:definition
-     (char #\~)
-     (read-definitions))
-    (:table
-     (parcom:string ":tab")
-     (read-table))
-    (:image
-     (parcom:string ":img")
-     (word)
-     (ok :description)
-     (string-take))
-    (:figure
-     (parcom:string ":fig")
-     (<*> (ok 'make-image)
-          (word))
-     (read-text))
-    ;; (:meta
-    ;;  (parse-key)
-    ;;  (read-pairs))
-    ))
+;; (defun sexp-tags ()
+;;   (make-tags
+;;     (:paragraph (parcom:string (format nil "~%~%")))
+;;     (:italic (char #\/))
+;;     (:bold (char #\*))
+;;     (:code (char #\%))
+;;     (:underline (char #\_))
+;;     (:strikethrough (char #\+))
+;;     (:superscript (parcom:string ":sup"))
+;;     (:subscript (parcom:string ":sub"))
+;;     (:inline-quote (char #\>))
+;;     (:block-quote (char #\<))
+;;     (:section
+;;      (char #\#)
+;;      (:title
+;;       (parcom:string ":title")
+;;       (read-title)))
+;;     (:web-link
+;;      (char #\@)
+;;      (word))
+;;     (:code-block
+;;      (char #\$)
+;;      (word))
+;;     (:unordered-list
+;;      (char #\-)
+;;      (read-list))
+;;     (:ordered-list
+;;      (char #\=)
+;;      (read-list))
+;;     (:definition
+;;      (char #\~)
+;;      (read-definitions))
+;;     (:table
+;;      (parcom:string ":tab")
+;;      (read-table))
+;;     (:image
+;;      (parcom:string ":img")
+;;      (word)
+;;      (ok :description)
+;;      (string-take))
+;;     (:figure
+;;      (parcom:string ":fig")
+;;      (<*> (ok 'make-image)
+;;           (word))
+;;      (read-text))
+;;     ;; (:meta
+;;     ;;  (parse-key)
+;;     ;;  (read-pairs))
+;;     ))
 
-(defun sexp-read (&optional (parser (sexp-tags)))
-  (between
-   (char +sexp-open+)
-   parser
-   (char +sexp-close+)))
+(defun sexp-read (parser)
+  (<* (*> (opt (consume #'whitespace-p))
+          (between
+           (char +sexp-open+)
+           (*>
+            (consume #'whitespace-p)
+            (<* parser (consume #'whitespace-p)))
+           (char +sexp-close+)))
+      (opt (consume #'whitespace-p))))
 
 ;;;; interface --------------------------------------------------------
 
