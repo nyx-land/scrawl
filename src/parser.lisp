@@ -117,6 +117,9 @@
 (defun whitespace-p (c)
   (cswitch #\space #\tab #\return #\newline))
 
+(defun ws-no-newline (c)
+  (cswitch #\space #\tab #\return))
+
 ;;;; parsers ----------------------------------------------------------
 
 (defun flatten (tree)
@@ -183,10 +186,6 @@
     (fmap #'read-from-string
           (funcall (take-sexp) input))))
 
-(defun read-reference ()
-  (*> (parcom:string "#:")
-      (word)))
-
 (defun parse-keypair ()
   (*> (peek (any-but +sexp-close+))
       (<*> (ok 'cons)
@@ -201,15 +200,14 @@
                'list)))
 
 (defun read-title ()
-  (<* (*> (*> (peek (any-but +sexp-close+))
-              (peek (any-but +sexp-open+))
-              (peek (any-but #\newline)))
-          (<*> (ok 'make-text)
-               (<*> (ok 'string-out)
-                    (take-while
-                     (lambda (c)
-                       (not (cswitch #\[ #\] #\newline)))))))
-      (consume #'whitespace-p)))
+  (*> (*> (peek (any-but +sexp-close+))
+          (peek (any-but +sexp-open+))
+          (peek (any-but #\newline)))
+      (<*> (ok 'make-text)
+           (<*> (ok 'string-out)
+                (take-while
+                 (lambda (c)
+                   (not (cswitch #\[ #\] #\newline))))))))
 
 (defun read-list ()
   (many-x (<*> (ok 'make-list-item)
@@ -225,14 +223,15 @@
 
 (defun read-tag (name alt-tag)
   (if alt-tag
-      (alt (if (keywordp alt-tag)
+      (*> (alt (if (keywordp alt-tag)
+                   (parcom:string
+                    (string-out
+                     (format nil "~(~s~)" alt-tag)))
+                   alt-tag)
                (parcom:string
                 (string-out
-                 (format nil "~(~s~)" alt-tag)))
-               alt-tag)
-           (parcom:string
-            (string-out
-             (format nil "~s" name))))
+                 (format nil "~s" name))))
+          (consume #'whitespace-p))
       (opt
        (parcom:string
         (string-out
@@ -242,10 +241,10 @@
   (if sexp
       `(sexp-read
         (*> (read-tag ,name ,alt-tag)
-            (consume #'whitespace-p)
+            ;;(consume #'whitespace-p)
             ,@body))
       `(*> (read-tag ,name ,alt-tag)
-           (consume #'whitespace-p)
+           ;;(consume #'whitespace-p)
            ,@body)))
 
 (defmacro defnode (name alt-tag &body body)
@@ -264,21 +263,27 @@
 ;; TODO: need a way of inserting parsers that aren't
 ;; parsed as args
 (defmacro with-args (parser &body body)
-  `(,parser ,@(mapcar
-               (lambda (x)
-                 (cond ((eq (car x) '&key)
-                        `(interleave
-                          (many
-                           (with-args alt ,@(cdr x)))))
-                       ((keywordp (car x))
-                        `(defarg ,(car x) ,(cadr x) t
-                           ,@(cddr x)))
-                       (t `(defarg ,(intern
-                                     (symbol-name (car x))
-                                     :keyword)
-                               nil nil
-                             ,@(cddr x)))))
-               body)))
+  `(,@parser ,@(mapcar
+                (lambda (x)
+                  (cond ((eq x '&def)
+                         `(interleave
+                           (many
+                            (with-args (alt)
+                              ,@*default-args*))))
+                        ((eq (car x) '&args)
+                         `(interleave
+                           (many
+                            (with-args (alt)
+                              ,@(cdr x)))))
+                        ((keywordp (car x))
+                         `(defarg ,(car x) ,(cadr x) t
+                            ,@(cddr x)))
+                        (t `(defarg ,(intern
+                                      (symbol-name (car x))
+                                      :keyword)
+                                nil nil
+                              ,@(cddr x)))))
+                body)))
 
 (defmacro with-nodes (&body body)
   `(alt ,@(mapcar
@@ -288,15 +293,44 @@
                `(defnode ,name ,alt-tag
                   (interleave
                    (with-args
-                       <*>
+                       (<*> (ok 'list))
                      ,@node-body)))))
            body)))
 
 (defun sexp-bd ()
-  (many-x (alt (sexp-read)
+  (many-x (alt (sexp-read (scrawl-nodes))
                (read-paragraph)
                (read-text))
           'list))
+
+(defun sexp-read (parser)
+  (<* (*> (opt (consume #'whitespace-p))
+          (between
+           (char +sexp-open+)
+           (*>
+            (consume #'whitespace-p)
+            (<* parser (consume #'whitespace-p)))
+           (char +sexp-close+)))
+      (consume #'whitespace-p)))
+
+;;;; tags -------------------------------------------------------------
+
+(defvar *default-args*
+  '((:metadata
+     :meta
+     (read-pairs))
+    (:reference
+     :ref
+     (word))))
+
+(defun scrawl-nodes ()
+  (with-nodes
+    (:section
+     (char #\#)
+     (title nil (read-title))
+     (children
+      nil
+      (sexp-bd)))))
 
 ;; TODO: this protocol for parsing different tags is very hacky
 ;; needs to have a more extensible way of switching between
@@ -359,16 +393,6 @@
 ;;     ;;  (parse-key)
 ;;     ;;  (read-pairs))
 ;;     ))
-
-(defun sexp-read (parser)
-  (<* (*> (opt (consume #'whitespace-p))
-          (between
-           (char +sexp-open+)
-           (*>
-            (consume #'whitespace-p)
-            (<* parser (consume #'whitespace-p)))
-           (char +sexp-close+)))
-      (opt (consume #'whitespace-p))))
 
 ;;;; interface --------------------------------------------------------
 
