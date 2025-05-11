@@ -155,6 +155,11 @@
                  #\space #\return
                  #\tab #\newline))))))
 
+(defun newline-x2 ()
+  (parcom:string
+   (string-out
+    (format nil "~%~%"))))
+
 (defun take-sexp ()
   (*> (peek (any-but +sexp-close+))
       (take-while (lambda (c)
@@ -169,8 +174,7 @@
        (string-take)))
 
 (defun read-paragraph ()
-  (*> (parcom:string
-       (string-out (format nil "~%~%")))
+  (*> (newline-x2) 
       (<*> (ok 'make-paragraph)
            (read-text))))
 
@@ -234,44 +238,57 @@
         (string-out
          (format nil "~s" name))))))
 
-(defmacro deftag (name alt-tag node-p &body body)
-  `(*> (read-tag ,name ,alt-tag)
-       (consume #'whitespace-p)
-       ,(if node-p
-            `(<*> (ok 'apply)
-                  (ok '(function make-instance))
-                  (ok ',(read-from-string
-                         (format nil "'~a" name)))
-                  ,@body)
-            `(<*> (ok ',name)
-                  ,@body))))
+(defmacro deftag (name alt-tag sexp &body body)
+  (if sexp
+      `(sexp-read
+        (*> (read-tag ,name ,alt-tag)
+            (consume #'whitespace-p)
+            ,@body))
+      `(*> (read-tag ,name ,alt-tag)
+           (consume #'whitespace-p)
+           ,@body)))
 
-(defmacro with-args (&body body)
-  `(alt ,@(mapcar
-           (lambda (x)
-             (cond ((eq (car x) '&key)
-                    `(many-x
-                      (with-args ,@(cdr x))
-                      'list))
-                   ((keywordp (car x))
-                    `(sexp-read
-                      (deftag ,(car x) ,(cadr x) nil
-                        ,@(cddr x))))
-                   (t `(deftag ,(intern
-                                 (symbol-name (car x))
-                                 :keyword)
-                           nil nil
-                         ,@(cddr x)))))
-           body)))
+(defmacro defnode (name alt-tag &body body)
+  `(deftag ,name ,alt-tag t
+     (<*> (ok 'apply)
+          (ok '(function make-instance))
+          (ok ',(read-from-string
+                 (format nil "'~a" name)))
+          ,@body)))
+
+(defmacro defarg (name alt-tag sexp &body body)
+  `(deftag ,name ,alt-tag ,sexp
+     (<*> (ok ,name)
+          ,@body)))
+
+;; TODO: need a way of inserting parsers that aren't
+;; parsed as args
+(defmacro with-args (parser &body body)
+  `(,parser ,@(mapcar
+               (lambda (x)
+                 (cond ((eq (car x) '&key)
+                        `(interleave
+                          (many
+                           (with-args alt ,@(cdr x)))))
+                       ((keywordp (car x))
+                        `(defarg ,(car x) ,(cadr x) t
+                           ,@(cddr x)))
+                       (t `(defarg ,(intern
+                                     (symbol-name (car x))
+                                     :keyword)
+                               nil nil
+                             ,@(cddr x)))))
+               body)))
 
 (defmacro with-nodes (&body body)
   `(alt ,@(mapcar
            (lambda (x)
              (destructuring-bind
                  (name alt-tag &rest node-body) x
-               `(sexp-read
-                 (deftag ,name ,alt-tag t
+               `(defnode ,name ,alt-tag
+                  (interleave
                    (with-args
+                       <*>
                      ,@node-body)))))
            body)))
 
