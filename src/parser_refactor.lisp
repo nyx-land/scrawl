@@ -113,6 +113,12 @@
 
 ;;;; body parsing -----------------------------------------------------
 
+(defun read-text ()
+  (p:take-until
+   (alt (p:char #\[)
+        (p:char #\]))))
+
+;; TODO: infinite loop!!!!!! :^^^^^^^^^^^^^^^^^)
 (defun sexp-body ()
   (many-x (alt (sexp-read (scrawl-nodes))
                (read-text))
@@ -149,12 +155,14 @@
       (consume #'whitespace-p)))
 
 (defun make-arg (name tag parser &optional (sexp t))
-  (let ((inner-parser (sexp-atom name tag)))
+  (let ((inner-parser (sexp-atom name tag))
+        (parser-body (<*> (p:pure name)
+                          parser)))
     (if sexp
         (sexp-read (*> inner-parser
-                       parser))
+                       parser-body))
         (*> inner-parser
-            parser))))
+            parser-body))))
 
 (defmacro make-node (name alt-tag &body body)
   `(sexp-read
@@ -163,21 +171,34 @@
              (p:pure '(function make-instance))
              (p:pure ',(read-from-string
                         (format nil "'~a" name)))
-             (<*> ,@body)))))
+             (interleave
+              (<*> (p:pure 'list)
+                   (interleave
+                    ,@body)))))))
 
 (defmacro with-args (parser &body body)
-  `(,parser ,@(mapcar
-               (lambda (x)
-                 `(make-arg
-                   ,(car x) ,(cadr x)
-                   ,(cddr x)
-                   ,(unless (keywordp (car x))
-                      nil)))
-               body)))
+  `(,@parser ,@(mapcar
+                (lambda (x)
+                  `(make-arg
+                    ,(if (keywordp (car x)) (car x)
+                         (intern (car x) :keyword))
+                    ,(cadr x)
+                    ,@(cddr x)
+                    ,(unless (keywordp (car x))
+                       nil)))
+                body)))
 
-(defmacro with-nodes (parser &body body)
-  `(,parser ,@(mapcar
-               (lambda (x)
-                 `(make-node ,(car x) ,(cadr x)
-                    (with-args <*> ,@(cddr x))))
-               body)))
+(defmacro with-nodes (&body body)
+  `(alt ,@(mapcar
+           (lambda (x)
+             `(make-node ,(car x) ,(cadr x)
+                (with-args (<*>)
+                  ,@(cddr x))))
+           body)))
+
+(defun scrawl-nodes ()
+  (with-nodes
+    (:section #\#
+      (:children
+       nil
+       (sexp-body)))))
