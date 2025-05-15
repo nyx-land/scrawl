@@ -114,15 +114,10 @@
 ;;;; body parsing -----------------------------------------------------
 
 (defun read-text ()
-  (p:take-until
-   (alt (p:char #\[)
-        (p:char #\]))))
-
-;; TODO: infinite loop!!!!!! :^^^^^^^^^^^^^^^^^)
-(defun sexp-body ()
-  (many-x (alt (sexp-read (scrawl-nodes))
-               (read-text))
-          'list))
+  (<*> (p:pure 'make-text)
+       (p:take-while
+        (lambda (c)
+          (not (cswitch #\[ #\]))))))
 
 ;;;; structure parsing ------------------------------------------------
 
@@ -130,7 +125,7 @@
   (between
    (p:char #\[)
    (*>
-    (consume #'whitespace-p)
+    (opt (consume #'whitespace-p))
     (<* parser (consume #'whitespace-p)))
    (p:char #\])))
 
@@ -164,6 +159,8 @@
         (*> inner-parser
             parser-body))))
 
+
+
 (defmacro make-node (name alt-tag &body body)
   `(sexp-read
     (*> (sexp-atom ,name ,alt-tag)
@@ -172,9 +169,8 @@
              (p:pure ',(read-from-string
                         (format nil "'~a" name)))
              (interleave
-              (<*> (p:pure 'list)
-                   (interleave
-                    ,@body)))))))
+              (ls (interleave
+                   ,@body)))))))
 
 (defmacro with-args (parser &body body)
   `(,@parser ,@(mapcar
@@ -189,16 +185,45 @@
                 body)))
 
 (defmacro with-nodes (&body body)
-  `(alt ,@(mapcar
-           (lambda (x)
-             `(make-node ,(car x) ,(cadr x)
-                (with-args (<*>)
-                  ,@(cddr x))))
-           body)))
+  `(many-x (alt ,@(mapcar
+                   (lambda (x)
+                     `(make-node ,(car x) ,(cadr x)
+                        (with-args (<*>)
+                          ,@(cddr x))))
+                   body)
+                (*> (peek (any-but #\]))
+                    (peek (any-but #\[))
+                    (read-text)))
+           'list))
 
 (defun scrawl-nodes ()
+  ;; this is roughly what everything should be expanding to
+  ;; and will be left here for reference temporarily
+  ;;
+  ;;
+  ;; (many-x (alt (sexp-read (*> (sexp-atom :section #\#)
+  ;;                             (<*> (p:pure 'apply)
+  ;;                                  (p:pure '(function make-instance))
+  ;;                                  (p:pure ''section)
+  ;;                                  (scrawl-nodes))))
+  ;;              (sexp-read (*> (sexp-atom :bold #\*)
+  ;;                             (<*> (p:pure 'apply)
+  ;;                                  (p:pure '(function make-instance))
+  ;;                                  (p:pure ''bold)
+  ;;                                  (scrawl-nodes))))
+               
+  ;;              (*> (peek (any-but #\]))
+  ;;                  (peek (any-but #\[))
+  ;;                  (read-text)))
+  ;;         'list)
   (with-nodes
-    (:section #\#
+    (:section
+        #\#
       (:children
        nil
-       (sexp-body)))))
+       (scrawl-nodes)))
+    (:bold
+     #\*
+     (:children
+      nil
+      (scrawl-nodes)))))
