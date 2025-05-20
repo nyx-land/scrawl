@@ -85,6 +85,12 @@
   `(or ,@(mapcar (lambda (c) `(char= c ,c))
                  chars)))
 
+(defun whitespace-n ()
+  (alt (p:char #\space)
+       (p:char #\tab)
+       (p:char #\return)
+       (p:char #\newline)))
+
 (defun whitespace-p (c)
   (cswitch #\space #\tab #\return #\newline))
 
@@ -113,18 +119,39 @@
             (cons x y))
           (funcall (many parser) input))))
 
+(defun count-x (n parser x)
+  (lambda (input)
+    (fmap (lambda (y)
+            (cons x y))
+          (funcall (p:count n parser) input))))
+
 (defun take-string ()
   (*> (peek (any-but #\]))
       (p:take-until
-       (alt (p:char #\[)
+       (alt (*> (opt #'p:space)
+                (p:char #\[))
             (p:char #\])
             (p:char #\newline)))))
 
+(defun take-text ()
+  (<*> (p:pure 'make-text)
+       (take-string)))
+
 (defun word ()
   (p:take-until
-   (alt #'p:space
+   (alt (peek (whitespace-n))
         (p:char #\[)
         (p:char #\]))))
+
+(defun read-pair ()
+  (*> (peek (any-but #\[))
+      (peek (any-but #\]))
+      (count-x 2 (<* (alt (between (p:char #\")
+                                   (take-string)
+                                   (p:char #\"))
+                          (word))
+                     (consume #'whitespace-p))
+               'cons)))
 
 (defun read-key (name)
   (<$ name (*> (p:char #\:)
@@ -139,6 +166,14 @@
     (character (p:char input))
     (string (p:string input))
     (null (p:pure t))))
+
+(defun sexp-read (parser)
+  (between
+   (p:char #\[)
+   (*>
+    (opt (consume #'whitespace-p))
+    parser)
+   (p:char #\])))
 
 (defun read-expr (name tag parser &key node-p sexp)
   (let ((expr (*> (if tag
@@ -163,10 +198,13 @@
   `(remnil (interleave (<*> (p:pure 'list) ,@body))))
 
 (defun default-args ()
-  (p:count 2 (opt (alt (arg :metadata :meta t
-                         (take-string))
-                       (arg :reference :ref t
-                         (word))))))
+  (p:count 2 (opt (alt (<* (arg :metadata :meta t
+                             (<*> (p:pure 'make-meta)
+                                  (many-x (read-pair) 'list)))
+                           #'p:space)
+                       (<* (arg :reference :ref t
+                             (word))
+                           #'p:space)))))
 
 (defun recur ()
   (opt (arg :children nil nil
@@ -182,7 +220,7 @@
 (defun scrawl ()
   (alt (node :section #\#
          (arg :title nil nil
-           (take-string))
+           (take-text))
          &def &rec)
        (node :bold #\*
          &rec &def)
@@ -191,7 +229,8 @@
        (read-expr :text-node nil
                   (with-args
                     (arg :text nil nil
-                      (take-string)))
+                      (take-string))
+                    (interleave (default-args)))
                   :node-p t :sexp nil)))
 
 
