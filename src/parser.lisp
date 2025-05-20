@@ -173,7 +173,7 @@
          (many-x (scrawl) 'list))))
 
 (defmacro node (name tag &body parser)
-  `(let ((&def (default-args))
+  `(let ((&def (interleave (default-args)))
          (&rec (recur)))
      (read-expr ,name ,tag
                 (with-args ,@parser)
