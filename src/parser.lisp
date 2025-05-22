@@ -239,13 +239,13 @@
            (take-text))
          &def &rec)
        (node :subscript :sub
-         &rec &def)
+         &def &rec)
        (node :superscript :sup
-         &rec &def)
+         &def &rec)
        (node :image :img
-         &rec &def)
+         &def &rec)
        (node :figure :fig
-         &rec &def)
+         &def &rec)
        (node :bold #\*
          &def &rec)
        (node :italic #\/
