@@ -70,6 +70,19 @@
 
 (in-package :scrawl.parser)
 
+;;;; utilities --------------------------------------------------------
+
+;; TODO: this isn't stopping at the closing bracket for some reason
+(defun read-into-string (stream &optional (out (make-string-output-stream)))
+  (loop for c = (read-char stream nil :eof)
+        until (char= c #\])
+        if (char= c #\[)
+          do (write-char #\[ out)
+             (read-into-string stream out)
+        else
+          do (write-char c out))
+  out)
+
 (defun format-parser (string &rest args)
   (with-output-to-string (stream)
     (apply #'format stream string args)))
@@ -128,15 +141,19 @@
                 (*> #'p:newline #'p:newline))))
       #'p:space))
 
-(defun take-text ()
-  (<*> (p:pure 'make-text)
-       (take-string)))
-
 (defun word ()
   (p:take-until
    (alt (peek (whitespace-n))
         (p:char #\[)
         (p:char #\]))))
+
+;;;; nodes & args -----------------------------------------------------
+
+(defun take-text ()
+  (<*> (p:pure 'make-text)
+       (take-string)))
+
+
 
 (defun read-pair ()
   (*> (peek (any-but #\[))
@@ -144,6 +161,9 @@
       (count-x 2 (<* (alt (between (p:char #\")
                                    (take-string)
                                    (p:char #\"))
+                          (between (p:char #\()
+                                   ()
+                                   (p:char #\)))
                           (word))
                      (consume #'whitespace-p))
                'cons)))
@@ -272,12 +292,24 @@
   (:documentation "The parser interface")
   (:method ((input string) &optional char)
     (declare (ignore char))
-    (parse (sexp-read) input))
+    (parse (scrawl) input))
   (:method ((input stream) &optional char)
     (declare (ignore char))
     (unread-char #\[ input)
-    (let ((string (read-string input)))
-      (parse (sexp-read) string))))
+    (let ((string (get-output-stream-string
+                   (read-into-string input))))
+      (print string)
+      ;;(parse (scrawl) string)
+      )))
+
+(defvar *previous-readtables* nil)
+
+(defconstant +sexp-open+ #\[)
+(defconstant +sexp-close+ #\])
+
+(defun read-delimiter (stream char)
+  (declare (ignore stream))
+  (error "Delimiter ~S shouldn't be read alone" char))
 
 (defmacro enable-scrawl ()
   '(eval-when (:compile-toplevel :load-toplevel :execute)
