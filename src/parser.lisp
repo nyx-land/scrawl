@@ -43,23 +43,16 @@
    :bold
    :italic
    :underline
+   :subscript
+   :superscript
    :strikethrough
    :code
    :code-block
    :web-link
+   :block-quote
+   :inline-quote
    ;; constructors
-   :make-paragraph
    :make-meta
-   :make-bold
-   :make-italic
-   :make-underline
-   :make-strikethrough
-   :make-subscript
-   :make-superscript
-   :make-code
-   :make-code-block
-   :make-block-quote
-   :make-inline-quote
    :make-text
    :make-web-link
    :make-section
@@ -219,6 +212,8 @@
                 (with-args ,@parser)
                 :node-p t :sexp t)))
 
+;; TODO: reference and meta args aren't being parsed correctly and
+;; are read as being part of the last text node
 (defun paragraph ()
   (read-expr :paragraph (*> #'p:newline)
              (with-args
@@ -243,10 +238,30 @@
          (arg :title nil nil
            (take-text))
          &def &rec)
+       (node :subscript :sub
+         &rec &def)
+       (node :superscript :sup
+         &rec &def)
+       (node :image :img
+         &rec &def)
+       (node :figure :fig
+         &rec &def)
        (node :bold #\*
-         &rec &def)
+         &def &rec)
        (node :italic #\/
-         &rec &def)
+         &def &rec)
+       (node :code #\%
+         &def &rec)
+       (node :code-block #\$
+         &def &rec)
+       (node :block-quote #\>
+         &def &rec)
+       (node :inline-quote #\<
+         &def &rec)
+       (node :underline #\_
+         &def &rec)
+       (node :strikethrough #\~
+         &def &rec)
        (paragraph)
        (text)))
 
