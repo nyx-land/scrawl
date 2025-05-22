@@ -126,12 +126,14 @@
           (funcall (p:count n parser) input))))
 
 (defun take-string ()
-  (*> (peek (any-but #\]))
-      (p:take-until
-       (alt (*> (opt #'p:space)
-                (p:char #\[))
-            (p:char #\])
-            (p:char #\newline)))))
+  (<* (*> (peek (any-but #\]))
+          (peek (any-but #\newline))
+          (p:take-until
+           (alt (*> (opt #'p:space)
+                    (p:char #\[))
+                (p:char #\])
+                (*> #'p:newline #'p:newline))))
+      #'p:space))
 
 (defun take-text ()
   (<*> (p:pure 'make-text)
@@ -162,6 +164,7 @@
 
 (defun sexp-atom (input)
   (etypecase input
+    (function input)
     (keyword (read-key input))
     (character (p:char input))
     (string (p:string input))
@@ -171,7 +174,7 @@
   (between
    (p:char #\[)
    (*>
-    (opt (consume #'whitespace-p))
+    (opt #'p:space)
     parser)
    (p:char #\])))
 
@@ -180,7 +183,7 @@
                       (alt (sexp-atom name)
                            (sexp-atom tag))
                       (sexp-atom nil))
-                  (consume #'whitespace-p)
+                  #'p:space
                   (if node-p
                       (<*> (p:pure 'apply)
                            (p:pure '(function make-instance))
@@ -192,19 +195,18 @@
     (if sexp (sexp-read expr) expr)))
 
 (defmacro arg (name tag sexp &body parser)
-  `(read-expr ,name ,tag ,@parser :node-p nil :sexp ,sexp))
+  `(<* (read-expr ,name ,tag ,@parser :node-p nil :sexp ,sexp)
+       #'p:space))
 
 (defmacro with-args (&body body)
   `(remnil (interleave (<*> (p:pure 'list) ,@body))))
 
 (defun default-args ()
-  (p:count 2 (opt (alt (<* (arg :metadata :meta t
-                             (<*> (p:pure 'make-meta)
-                                  (many-x (read-pair) 'list)))
-                           #'p:space)
-                       (<* (arg :reference :ref t
-                             (word))
-                           #'p:space)))))
+  (p:count 2 (opt (alt (arg :metadata :meta t
+                         (<*> (p:pure 'make-meta)
+                              (many-x (read-pair) 'list)))
+                       (arg :reference :ref t
+                         (word))))))
 
 (defun recur ()
   (opt (arg :children nil nil
@@ -217,6 +219,25 @@
                 (with-args ,@parser)
                 :node-p t :sexp t)))
 
+(defun paragraph ()
+  (read-expr :paragraph (*> #'p:newline)
+             (with-args
+               (arg :children nil nil
+                 (many-x (*> (*> (opt #'p:newline)
+                                 (peek (any-but #\newline)))
+                             (scrawl))
+                         'list))
+               (interleave (default-args)))
+             :node-p t :sexp nil))
+
+(defun text ()
+  (read-expr :text-node (opt #'p:newline)
+             (with-args
+               (arg :text nil nil
+                 (take-string))
+               (interleave (default-args)))
+             :node-p t :sexp nil))
+
 (defun scrawl ()
   (alt (node :section #\#
          (arg :title nil nil
@@ -226,12 +247,8 @@
          &rec &def)
        (node :italic #\/
          &rec &def)
-       (read-expr :text-node nil
-                  (with-args
-                    (arg :text nil nil
-                      (take-string))
-                    (interleave (default-args)))
-                  :node-p t :sexp nil)))
+       (paragraph)
+       (text)))
 
 
 ;;;; interface --------------------------------------------------------
