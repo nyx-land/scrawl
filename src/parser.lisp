@@ -296,10 +296,9 @@
     (declare (ignore char))
     (let ((out (make-string-output-stream)))
       (write-char #\[ out)
-      (get-output-stream-string
-       (read-into-string input out))
-      ;;(parse (scrawl) string)
-      )))
+      (parse (scrawl)
+             (get-output-stream-string
+              (read-into-string input out))))))
 
 (defvar *previous-readtables* nil)
 
