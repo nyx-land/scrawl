@@ -72,15 +72,14 @@
 
 ;;;; utilities --------------------------------------------------------
 
-;; TODO: this isn't stopping at the closing bracket for some reason
 (defun read-into-string (stream &optional (out (make-string-output-stream)))
-  (loop for c = (read-char stream nil :eof)
+  (loop for c = (read-char stream t nil t)
         until (char= c #\])
-        if (char= c #\[)
-          do (write-char #\[ out)
-             (read-into-string stream out)
-        else
-          do (write-char c out))
+        do (if (char= c #\[)
+               (progn (write-char #\[ out)
+                      (read-into-string stream out))
+               (write-char c out))
+        finally (write-char #\] out))
   out)
 
 (defun format-parser (string &rest args)
@@ -295,10 +294,10 @@
     (parse (scrawl) input))
   (:method ((input stream) &optional char)
     (declare (ignore char))
-    (unread-char #\[ input)
-    (let ((string (get-output-stream-string
-                   (read-into-string input))))
-      (print string)
+    (let ((out (make-string-output-stream)))
+      (write-char #\[ out)
+      (get-output-stream-string
+       (read-into-string input out))
       ;;(parse (scrawl) string)
       )))
 
