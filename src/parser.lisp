@@ -314,6 +314,10 @@
     (push *readtable* *previous-readtables*)
     (setq *readtable* (copy-readtable))
     (set-macro-character +sexp-open+ 'parse-scrawl)
+    (set-dispatch-macro-character #\# +sexp-open+
+     #'(lambda (s c n)
+         (declare (ignore n))
+         (parse-scrawl s c)))
     (set-macro-character +sexp-close+ 'read-delimiter)))
 
 (defmacro disable-scrawl ()
