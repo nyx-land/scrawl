@@ -1,13 +1,13 @@
-- [Scrawl](#org62dba9f)
-  - [Installation](#orgadd3f0e)
-  - [Usage](#org44c2019)
-    - [Syntax: The Basics](#org24daf67)
-    - [Arguments](#orgc4c547a)
-  - [A Note on Formatting](#orgf0fc89b)
-    - [A Caveat](#orga5bc328)
+- [Scrawl](#orgcbf043a)
+  - [Installation](#orgb4b08b7)
+  - [Usage](#orgd49d3df)
+    - [Syntax: The Basics](#orgac5d53f)
+    - [Arguments](#org18b5e17)
+  - [A Note on Formatting](#org6cb2b6c)
+    - [A Caveat](#org57fb637)
 
 
-<a id="org62dba9f"></a>
+<a id="orgcbf043a"></a>
 
 # Scrawl
 
@@ -16,16 +16,14 @@ Scrawl is a document markup format for Common Lisp that uses s-expressions, is i
 Please note that this project is still rather messy and incomplete, but the actual parser does work and is useful right now, which is why I'm releasing this publicly. There are still CommonDoc nodes that I need to implement, and I will need to fork CommonDoc itself since the original author has abandoned it and I would like to add some features to it, but this is an active project that I plan to replace org-mode with and use extensively for my writing. There will be many forthcoming changes and improvements!
 
 
-<a id="orgadd3f0e"></a>
+<a id="orgb4b08b7"></a>
 
 ## Installation
 
 You will need to clone this [somewhere that ASDF can find it](https://asdf.common-lisp.dev/asdf.html#Configuring-ASDF-to-find-your-systems), unless I decide this project is good enough to submit to Quicklisp. Then you can `(ql:quickload :scrawl)` it.
 
-For now, the package we care about is `SCRAWL.PARSER`. The `SCRAWL.EMITTER` package does nothing right now, and the toplevel one isn't setup yet to return a whole document like CommonDoc's interface expects.
 
-
-<a id="org44c2019"></a>
+<a id="orgd49d3df"></a>
 
 ## Usage
 
@@ -101,7 +99,7 @@ Pretty cool huh?
 You can also run `DISABLE-SCRAWL` to disable Scrawl syntax.
 
 
-<a id="org24daf67"></a>
+<a id="orgac5d53f"></a>
 
 ### Syntax: The Basics
 
@@ -233,7 +231,7 @@ You'll note that nodes all follow the same simple pattern:
 Most of these are simple markup, like
 
 
-<a id="orgc4c547a"></a>
+<a id="org18b5e17"></a>
 
 ### Arguments
 
@@ -244,7 +242,7 @@ Some nodes accept additional positional arguments that arent enclosed by bracket
 Finally, because Scrawl is meant to be use to write prose by hand and we need to make some sacrifices with how pure of a lisp it is, paragraphs are delimited by two newlines and are their own nodes (namely, blocks of text which may contain other subnodes).
 
 
-<a id="orgf0fc89b"></a>
+<a id="org6cb2b6c"></a>
 
 ## A Note on Formatting
 
@@ -266,7 +264,7 @@ emacs-lisp
 Now everything will be indented nicely and is read as s-expressions the same as any other lisp code, which allows for Scrawl to be seamlessly integrated into a structural editing workflow.
 
 
-<a id="orga5bc328"></a>
+<a id="org57fb637"></a>
 
 ### A Caveat
 

@@ -27,11 +27,6 @@ You will need to clone this [[https://asdf.common-lisp.dev/asdf.html#Configuring
 decide this project is good enough to submit to Quicklisp. Then you
 can =(ql:quickload :scrawl)= it.
 
-For now, the package we care about is =SCRAWL.PARSER=. The
-=SCRAWL.EMITTER= package does nothing right now, and the toplevel one
-isn't setup yet to return a whole document like CommonDoc's interface
-expects.
-
 ** Usage
 
 For now, the package we care about is =SCRAWL.PARSER=. The
