@@ -14,11 +14,12 @@ document representation backend.
 
 Please note that this project is still rather messy and incomplete,
 but the actual parser does work and is useful right now, which is why
-I'm releasing this publicly. There are still Common Doc nodes that I
-need to implement, and I will need to for Common Doc itself since the
-original author has abandoned it, but this is an active project that I
-plan to replace org-mode with and use extensively for my writing.
-There will be many forthcoming changes and improvements!
+I'm releasing this publicly. There are still CommonDoc nodes that I
+need to implement, and I will need to fork CommonDoc itself since the
+original author has abandoned it and I would like to add some features
+to it, but this is an active project that I plan to replace org-mode
+with and use extensively for my writing.  There will be many
+forthcoming changes and improvements!
 
 ** A Note on Formatting
 
