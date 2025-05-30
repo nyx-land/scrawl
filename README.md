@@ -1,18 +1,18 @@
-- [Scrawl](#org1a8e5fd)
-  - [A Note on Formatting](#orgaebc93f)
-    - [A Caveat](#org2132b93)
+- [Scrawl](#orgee6fe6a)
+  - [A Note on Formatting](#orgc0b2d9e)
+    - [A Caveat](#org950d00a)
 
 
-<a id="org1a8e5fd"></a>
+<a id="orgee6fe6a"></a>
 
 # Scrawl
 
 Scrawl is a document markup format for Common Lisp that uses s-expressions, is implemented within CL using reader macros, and that uses Common Doc as the document representation backend. It uses [parcom](https://github.com/fosskers/parcom/) to implement the actual parsing, and because it's implemented as reader macros in Common Lisp, you can use any CL implementation as the "compiler" backend for Scrawl.
 
-Please note that this project is still rather messy and incomplete, but the actual parser does work and is useful right now, which is why I'm releasing this publicly. This is an active project that I plan to replace org-mode with and use extensively for my writing; there will be many forthcoming changes and improvements!
+Please note that this project is still rather messy and incomplete, but the actual parser does work and is useful right now, which is why I'm releasing this publicly. There are still Common Doc nodes that I need to implement, and I will need to for Common Doc itself since the original author has abandoned it, but this is an active project that I plan to replace org-mode with and use extensively for my writing. There will be many forthcoming changes and improvements!
 
 
-<a id="orgaebc93f"></a>
+<a id="orgc0b2d9e"></a>
 
 ## A Note on Formatting
 
@@ -34,7 +34,7 @@ emacs-lisp
 Now everything will be indented nicely and is read as s-expressions the same as any other lisp code, which allows for Scrawl to be seamlessly integrated into a structural editing workflow.
 
 
-<a id="org2132b93"></a>
+<a id="org950d00a"></a>
 
 ### A Caveat
 
