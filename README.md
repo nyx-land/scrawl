@@ -1,13 +1,13 @@
-- [Scrawl](#orgcbf043a)
-  - [Installation](#orgb4b08b7)
-  - [Usage](#orgd49d3df)
-    - [Syntax: The Basics](#orgac5d53f)
-    - [Arguments](#org18b5e17)
-  - [A Note on Formatting](#org6cb2b6c)
-    - [A Caveat](#org57fb637)
+- [Scrawl](#org5cb314f)
+  - [Installation](#org815a438)
+  - [Usage](#org7152625)
+    - [Syntax: The Basics](#org64da9af)
+    - [Arguments](#org8e55773)
+  - [A Note on Formatting](#org56c56a2)
+    - [A Caveat](#org63b24bd)
 
 
-<a id="orgcbf043a"></a>
+<a id="org5cb314f"></a>
 
 # Scrawl
 
@@ -16,14 +16,14 @@ Scrawl is a document markup format for Common Lisp that uses s-expressions, is i
 Please note that this project is still rather messy and incomplete, but the actual parser does work and is useful right now, which is why I'm releasing this publicly. There are still CommonDoc nodes that I need to implement, and I will need to fork CommonDoc itself since the original author has abandoned it and I would like to add some features to it, but this is an active project that I plan to replace org-mode with and use extensively for my writing. There will be many forthcoming changes and improvements!
 
 
-<a id="orgb4b08b7"></a>
+<a id="org815a438"></a>
 
 ## Installation
 
 You will need to clone this [somewhere that ASDF can find it](https://asdf.common-lisp.dev/asdf.html#Configuring-ASDF-to-find-your-systems), unless I decide this project is good enough to submit to Quicklisp. Then you can `(ql:quickload :scrawl)` it.
 
 
-<a id="orgd49d3df"></a>
+<a id="org7152625"></a>
 
 ## Usage
 
@@ -99,7 +99,7 @@ Pretty cool huh?
 You can also run `DISABLE-SCRAWL` to disable Scrawl syntax.
 
 
-<a id="orgac5d53f"></a>
+<a id="org64da9af"></a>
 
 ### Syntax: The Basics
 
@@ -226,12 +226,10 @@ Every node is identified by two tags: The full name (represented as a keyword), 
 
 You'll note that nodes all follow the same simple pattern:
 
-`bracket -> optional space -> name or shorthand tag -> space -> args and subnodes -> closing bracket`
-
-Most of these are simple markup, like
+`[ optional space -> name/shorthand -> space -> positional args -> optional metadata & reference -> subnodes ]`
 
 
-<a id="org18b5e17"></a>
+<a id="org8e55773"></a>
 
 ### Arguments
 
@@ -239,10 +237,17 @@ Every node accepts a `:metadata | :meta` and `:reference | :ref` argument, which
 
 Some nodes accept additional positional arguments that arent enclosed by brackets, such as `:section` which accepts a `<title>` positional argument that is read as a string of text until it encounters a newline or bracket.
 
-Finally, because Scrawl is meant to be use to write prose by hand and we need to make some sacrifices with how pure of a lisp it is, paragraphs are delimited by two newlines and are their own nodes (namely, blocks of text which may contain other subnodes).
+Most nodes are simple inline markup like `:bold`, `:italic`, etc. and have nothing complicated going on: they optional `:metadata` and `:reference` arguments and then read the subnodes. Even the exceptions to the general pattern like `:section` or `:image` and `:figure` are relatively simple and handle arguments positionally:
+
+-   `:section` takes a `<title>` argument that is a string that is read until brackets or a newline
+-   `:image` takes a positional `<source>` argument of a URI and `<description>` string
+-   `:figure` takes an `:image` subnode and a `<description>`
+-   list nodes parse their subnodes as lists that are delimited by brackets
+
+Finally, because Scrawl is meant to be use to write prose by hand and we need to make some sacrifices with how pure of a lisp it is, **paragraphs are delimited by two newlines** and are their own nodes (namely, blocks of text which may contain other subnodes).
 
 
-<a id="org6cb2b6c"></a>
+<a id="org56c56a2"></a>
 
 ## A Note on Formatting
 
@@ -264,7 +269,7 @@ emacs-lisp
 Now everything will be indented nicely and is read as s-expressions the same as any other lisp code, which allows for Scrawl to be seamlessly integrated into a structural editing workflow.
 
 
-<a id="org57fb637"></a>
+<a id="org63b24bd"></a>
 
 ### A Caveat
 

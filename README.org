@@ -236,10 +236,8 @@ truncated keys:
 
 You'll note that nodes all follow the same simple pattern:
 
-=bracket -> optional space -> name or shorthand tag -> space -> args
-and subnodes -> closing bracket=
-
-Most of these are simple markup, like 
+=[ optional space -> name/shorthand -> space -> positional args ->
+optional metadata & reference -> subnodes ]=
 
 *** Arguments
 
@@ -257,9 +255,23 @@ by brackets, such as =:section= which accepts a =<title>= positional
 argument that is read as a string of text until it encounters a
 newline or bracket.
 
+Most nodes are simple inline markup like =:bold=, =:italic=, etc. and
+have nothing complicated going on: they optional =:metadata= and
+=:reference= arguments and then read the subnodes. Even the exceptions
+to the general pattern like =:section= or =:image= and =:figure= are
+relatively simple and handle arguments positionally:
+
+- =:section= takes a =<title>= argument that is a string that is read
+  until brackets or a newline
+- =:image= takes a positional =<source>= argument of a URI and
+  =<description>= string
+- =:figure= takes an =:image= subnode and a =<description>=
+- list nodes parse their subnodes as lists that are delimited by
+  brackets
+
 Finally, because Scrawl is meant to be use to write prose by hand and
 we need to make some sacrifices with how pure of a lisp it is,
-paragraphs are delimited by two newlines and are their own nodes
+*paragraphs are delimited by two newlines* and are their own nodes
 (namely, blocks of text which may contain other subnodes).
 
 ** A Note on Formatting
