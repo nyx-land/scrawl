@@ -1,9 +1,13 @@
-- [Scrawl](#org45aff84)
-  - [A Note on Formatting](#org880e3ab)
-    - [A Caveat](#org6417762)
+- [Scrawl](#org62dba9f)
+  - [Installation](#orgadd3f0e)
+  - [Usage](#org44c2019)
+    - [Syntax: The Basics](#org24daf67)
+    - [Arguments](#orgc4c547a)
+  - [A Note on Formatting](#orgf0fc89b)
+    - [A Caveat](#orga5bc328)
 
 
-<a id="org45aff84"></a>
+<a id="org62dba9f"></a>
 
 # Scrawl
 
@@ -12,7 +16,235 @@ Scrawl is a document markup format for Common Lisp that uses s-expressions, is i
 Please note that this project is still rather messy and incomplete, but the actual parser does work and is useful right now, which is why I'm releasing this publicly. There are still CommonDoc nodes that I need to implement, and I will need to fork CommonDoc itself since the original author has abandoned it and I would like to add some features to it, but this is an active project that I plan to replace org-mode with and use extensively for my writing. There will be many forthcoming changes and improvements!
 
 
-<a id="org880e3ab"></a>
+<a id="orgadd3f0e"></a>
+
+## Installation
+
+You will need to clone this [somewhere that ASDF can find it](https://asdf.common-lisp.dev/asdf.html#Configuring-ASDF-to-find-your-systems), unless I decide this project is good enough to submit to Quicklisp. Then you can `(ql:quickload :scrawl)` it.
+
+For now, the package we care about is `SCRAWL.PARSER`. The `SCRAWL.EMITTER` package does nothing right now, and the toplevel one isn't setup yet to return a whole document like CommonDoc's interface expects.
+
+
+<a id="org44c2019"></a>
+
+## Usage
+
+For now, the package we care about is `SCRAWL.PARSER`. The `SCRAWL.EMITTER` package does nothing right now, and the toplevel one isn't setup yet to return a whole document like CommonDoc's interface expects.
+
+```common-lisp
+CL-USER> (ql:quickload :scrawl)
+To load "scrawl":
+  Load 1 ASDF system:
+    scrawl
+; Loading "scrawl"
+..................................................
+[package common-html.template]....................
+[package common-html.multi-emit]..................
+[package common-html.emitter].....................
+[package common-html.toc].........................
+[package common-html].............................
+[package scrawl.parser]...........................
+[package scrawl.emitter]..........................
+[package scrawl]
+(:SCRAWL)
+CL-USER> (in-package :scrawl.parser)
+#<PACKAGE "SCRAWL.PARSER">
+PARSER> 
+```
+
+Because Scrawl is meant to a syntax extension to Common Lisp using reader macros, you simply enable the syntax and then can write it anywhere Common Lisp works, e.g. a Sly REPL:
+
+```common-lisp
+PARSER> (enable-scrawl)
+T
+PARSER> #[# this is an example of a section title
+          [:meta with some meta data] [:ref and-a-reference]
+
+          here is a paragraph within the enclosing section node
+          with [/ some italic [* and also bold]] text inside it
+
+          [# this is a subsection
+
+           if emitted to HTML it is read as [% <h2>this is a
+           subsection</h2>]]]
+#<SECTION title: this is an example of a section title
+, ref: and-a-reference>
+PARSER> (common-doc:dump *)
+section [with=somemeta=data]
+  paragraph
+    text-node
+      "here is a paragraph within the enclosing section node
+          with"
+    italic
+      text-node
+        "some italic"
+      bold
+        text-node
+          "and also bold"
+    text-node
+      "text inside it"
+  paragraph
+    section
+      paragraph
+        text-node
+          "if emitted to HTML it is read as"
+        code
+          text-node
+            "<h2>this is a
+           subsection</h2>"
+NIL
+PARSER> 
+```
+
+Pretty cool huh?
+
+You can also run `DISABLE-SCRAWL` to disable Scrawl syntax.
+
+
+<a id="org24daf67"></a>
+
+### Syntax: The Basics
+
+Almost everything we need to know about how to use Scrawl can be ascertained from the `SCRAWL` function in `src/parser.lisp`:
+
+```common-lisp
+;; note that this is incomplete! there are more nodes I need to implement
+;; like links and tables
+(defun scrawl ()
+  (alt (node :section #\#
+         (arg :title nil nil
+           (take-text))
+         &def &rec)
+       (node :subscript :sub
+         &def &rec)
+       (node :superscript :sup
+         &def &rec)
+       (image-node)
+       (node :figure :fig
+         (arg :image nil nil
+           (image-node))
+         (desc-arg)
+         &def)
+       (node :unordered-list #\-
+         &def (list-node))
+       (node :ordered-list #\=
+         &def (list-node))
+       (node :bold #\*
+         &def &rec)
+       (node :italic #\/
+         &def &rec)
+       (node :code #\%
+         &def &rec)
+       (node :code-block #\$
+         (arg :language nil nil
+           (word))
+         &def &rec)
+       (node :block-quote #\>
+         &def &rec)
+       (node :inline-quote #\<
+         &def &rec)
+       (node :underline #\_
+         &def &rec)
+       (node :strikethrough #\~
+         &def &rec)
+       (paragraph)
+       (text)))
+```
+
+In the future the Scrawl spec will be autogenerated for convenience sake since it's already very trivial, but the general pattern is that every scrawl node is the following:
+
+```
+[node <positional-args> <metadata> <reference>
+
+subnodes]
+```
+
+Note that two newlines indicates the start of the subnodes.
+
+Every node is identified by two tags: The full name (represented as a keyword), and a shorthand. Many shorthands are characters, while some less commonly used nodes like `:superscript` and `:subscript` use truncated keys:
+
+```
+:section | #
+  <title>
+  <meta> <ref>
+  subnodes
+
+:unordered-list | -
+  <meta> <ref>
+  lists
+
+:ordered-list | =
+  <meta> <ref>
+  lists
+
+:bold | *
+  <meta> <ref>
+  subnodes
+
+:italic | /
+  <meta> <ref>
+  subnodes
+
+:code | %
+  <meta> <ref>
+  subnodes
+
+:code-block | $
+  <meta> <ref>
+  subnodes
+
+:block-quote | >
+  <meta> <ref>
+  subnodes
+
+:inline-quote | <
+  <meta> <ref>
+  subnodes
+
+:underline | _
+  <meta> <ref>
+  subnodes
+
+:strikethrough | ~
+  <meta> <ref>
+  subnodes
+
+:subscript | :sub
+  <meta> <ref>
+  subnodes
+
+:superscript | :sup
+  <meta> <ref>
+  subnodes
+
+:image | :img
+  <source> <description>
+  <meta> <ref>
+
+:figure | :fig
+  <image> <description>
+  <meta> <ref>
+```
+
+You'll note that nodes all follow the same simple pattern:
+
+`bracket -> optional space -> name or shorthand tag -> space -> args and subnodes -> closing bracket`
+
+Most of these are simple markup, like
+
+
+<a id="orgc4c547a"></a>
+
+### Arguments
+
+Every node accepts a `:metadata | :meta` and `:reference | :ref` argument, which are parsed the same way as nodes but only exist within a node and is parsed as a property of the enclosing node. `:metadata` is a list of pairs, e.g. `[:metadata foo bar]` that get parsed as strings and are used by CommonDoc as metadata for the node in question, and `:reference` is a single word, e.g. `[:reference foo-bar-baz]` that is used by CommonDoc as essentially a kind of internal link for document nodes.
+
+Some nodes accept additional positional arguments that arent enclosed by brackets, such as `:section` which accepts a `<title>` positional argument that is read as a string of text until it encounters a newline or bracket.
+
+Finally, because Scrawl is meant to be use to write prose by hand and we need to make some sacrifices with how pure of a lisp it is, paragraphs are delimited by two newlines and are their own nodes (namely, blocks of text which may contain other subnodes).
+
+
+<a id="orgf0fc89b"></a>
 
 ## A Note on Formatting
 
@@ -34,7 +266,7 @@ emacs-lisp
 Now everything will be indented nicely and is read as s-expressions the same as any other lisp code, which allows for Scrawl to be seamlessly integrated into a structural editing workflow.
 
 
-<a id="org6417762"></a>
+<a id="orga5bc328"></a>
 
 ### A Caveat
 
