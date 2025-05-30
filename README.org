@@ -8,11 +8,9 @@
 * Scrawl
 
 Scrawl is a document markup format for Common Lisp that uses
-s-expressions, is implemented within CL using reader macros, and that
-uses Common Doc as the document representation backend. It uses [[https://github.com/fosskers/parcom/][parcom]]
-to implement the actual parsing, and because it's implemented as
-reader macros in Common Lisp, you can use any CL implementation as the
-"compiler" backend for Scrawl.
+s-expressions, is implemented within CL using reader macros with the
+parser itself implemented using [[https://github.com/fosskers/parcom/][parcom]], and that uses [[https://commondoc.github.io/][CommonDoc]] as the
+document representation backend.
 
 Please note that this project is still rather messy and incomplete,
 but the actual parser does work and is useful right now, which is why
