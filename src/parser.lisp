@@ -48,14 +48,12 @@
    :strikethrough
    :code
    :code-block
-   :web-link
    :block-quote
    :inline-quote
    ;; constructors
    :make-meta
    :make-text
    :make-web-link
-   :make-section
    :make-unordered-list
    :make-ordered-list
    :make-definition-list
@@ -141,18 +139,21 @@
       #'p:space))
 
 (defun word ()
-  (p:take-until
-   (alt (peek (whitespace-n))
-        (p:char #\[)
-        (p:char #\]))))
+  (lambda (input)
+    (fmap (lambda (i)
+            (if (p:empty? i) ''nil i))
+          (funcall 
+           (p:take-until
+            (alt (peek (whitespace-n))
+                 (p:char #\[)
+                 (p:char #\])))
+           input))))
 
 ;;;; nodes & args -----------------------------------------------------
 
 (defun take-text ()
   (<*> (p:pure 'make-text)
        (take-string)))
-
-
 
 (defun read-pair ()
   (*> (peek (any-but #\[))
@@ -190,6 +191,12 @@
     parser)
    (p:char #\])))
 
+(defun make-node (name parser)
+  (<*> (p:pure 'apply)
+       (p:pure '(function make-instance))
+       (p:pure name)
+       parser))
+
 (defun read-expr (name tag parser &key node-p sexp)
   (let ((expr (*> (if tag
                       (alt (sexp-atom name)
@@ -197,11 +204,9 @@
                       (sexp-atom nil))
                   #'p:space
                   (if node-p
-                      (<*> (p:pure 'apply)
-                           (p:pure '(function make-instance))
-                           (p:pure (read-from-string
-                                    (format-parser "'~a" name)))
-                           parser)
+                      (make-node (read-from-string
+                                  (format-parser "'~a" name))
+                                 parser)
                       (<*> (p:pure name)
                            parser)))))
     (if sexp (sexp-read expr) expr)))
@@ -214,11 +219,15 @@
   `(remnil (interleave (<*> (p:pure 'list) ,@body))))
 
 (defun default-args ()
-  (p:count 2 (opt (alt (arg :metadata :meta t
-                         (<*> (p:pure 'make-meta)
-                              (many-x (read-pair) 'list)))
-                       (arg :reference :ref t
-                         (word))))))
+  (p:count 2 (opt (alt (*> (opt #'p:newline)
+                           #'p:space
+                           (arg :metadata :meta t
+                             (<*> (p:pure 'make-meta)
+                                  (many-x (read-pair) 'list))))
+                       (*> (opt #'p:newline)
+                           #'p:space
+                           (arg :reference :ref t
+                             (word)))))))
 
 (defun recur ()
   (opt (arg :children nil nil
@@ -227,6 +236,7 @@
 (defmacro node (name tag &body parser)
   `(let ((&def (interleave (default-args)))
          (&rec (recur)))
+     (declare (ignorable &rec &def))
      (read-expr ,name ,tag
                 (with-args ,@parser)
                 :node-p t :sexp t)))
@@ -252,6 +262,48 @@
                (interleave (default-args)))
              :node-p t :sexp nil))
 
+(defun desc-arg ()
+  (opt (*> (consume #'whitespace-p)
+           (arg :description nil nil
+             (take-text)))))
+
+(defun image-node ()
+  (node :image :img
+    (arg :source nil nil
+      (word))
+    (desc-arg)
+    &def))
+
+(defun list-node ()
+  (arg :children nil nil
+    (many-x (node :list-item nil
+              (scrawl))
+            'list)))
+
+(defun parse-link (initarg)
+  (if (eq initarg 'web-link)
+      (with-args
+        (arg :uri nil nil (word))
+        (default-args)
+        (recur))
+      (with-args
+        (arg :node-reference nil nil (word))
+        (arg :document-reference nil nil (word))
+        (default-args)
+        (recur))))
+
+(defun link-node ()
+  (sexp-read
+   (*> (alt (sexp-atom #\@)
+            (sexp-atom :link))
+       #'p:space
+       (alt (*> (peek (alt (p:string "http")
+                           (p:char #\#)))
+                (make-node ''web-link
+                           (parse-link 'web-link)))
+            (make-node ''document-link
+                       (parse-link 'document-link))))))
+
 (defun scrawl ()
   (alt (node :section #\#
          (arg :title nil nil
@@ -261,10 +313,17 @@
          &def &rec)
        (node :superscript :sup
          &def &rec)
-       (node :image :img
-         &def &rec)
+       (image-node)
+       (link-node)
        (node :figure :fig
-         &def &rec)
+         (arg :image nil nil
+           (image-node))
+         (desc-arg)
+         &def)
+       (node :unordered-list #\-
+         &def (list-node))
+       (node :ordered-list #\=
+         &def (list-node))
        (node :bold #\*
          &def &rec)
        (node :italic #\/
@@ -272,6 +331,8 @@
        (node :code #\%
          &def &rec)
        (node :code-block #\$
+         (arg :language nil nil
+           (word))
          &def &rec)
        (node :block-quote #\>
          &def &rec)
