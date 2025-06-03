@@ -284,12 +284,12 @@
   (if (eq initarg 'web-link)
       (with-args
         (arg :uri nil nil (word))
-        (default-args)
+        (interleave (default-args))
         (recur))
       (with-args
         (arg :node-reference nil nil (word))
         (arg :document-reference nil nil (word))
-        (default-args)
+        (interleave (default-args))
         (recur))))
 
 (defun link-node ()
