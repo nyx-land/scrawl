@@ -1,5 +1,5 @@
 (defpackage #:scrawl.parser
-  (:use :cl)
+  (:use :cl :scrawl)
   (:local-nicknames (:p :parcom))
   (:import-from
    :parcom
@@ -148,141 +148,96 @@
 
 ;;;; nodes & args -----------------------------------------------------
 
-(defun take-text ()
-  (<*> (p:pure 'make-text)
-       (take-string)))
+(defun keypair (&optional key)
+  (p:ap (lambda (x y)
+          (cons (read-from-string x) y))
+        (*> #'p:space
+            (if key
+                key
+                (p:recognize
+                 (<*> (p:char #\:)
+                      (take-word)))))
+        (*> #'p:space1
+            (take-word))))
 
+(defun reference ()
+  (keypair (p:alt (p:string ":reference")
+                  (p:string ":ref"))))
 
+(defun metadata ()
+  (p:many (p:alt (reference)
+                 (keypair))))
 
-(defun read-pair ()
-  (*> (peek (any-but #\[))
-      (peek (any-but #\]))
-      (count-x 2 (<* (alt (between (p:char #\")
-                                   (take-string)
-                                   (p:char #\"))
-                          (between (p:char #\()
-                                   ()
-                                   (p:char #\)))
-                          (word))
-                     (consume #'whitespace-p))
-               'cons)))
+(defun markup (type)
+  (p:ap (lambda (meta)
+          `(,type ,@meta))
+        (p:opt (metadata))))
 
-(defun read-key (name)
-  (<$ name (*> (p:char #\:)
-               (alt (p:string
-                     (format-parser "~(~a~)" name))
-                    (p:string
-                     (format-parser "~a" name))))))
+(defun section ()
+  (p:ap (lambda (title meta children)
+          `(section
+            :title ,title
+            ,@meta
+            :children ,children))
+        (p:take-until
+         (p:alt (keypair)
+                (blank-line)))
+        (p:opt (metadata))
+        (p:opt (*> (blank-line) (scrawl/body)))))
 
-(defun sexp-atom (input)
-  (etypecase input
-    (function input)
-    (keyword (read-key input))
-    (character (p:char input))
-    (string (p:string input))
-    (null (p:pure t))))
+(defun inline ()
+  (p:alt (scrawl (p:alt (p:char #\*)
+                        (p:char #\/)
+                        (p:char #\%)
+                        (p:char #\_)
+                        (p:char #\~)))
+         (p:take-while
+          (lambda (c)
+            (not (charswitch c
+                   #\[ #\]))))))
 
-(defun sexp-read (parser)
-  (between
-   (p:char #\[)
-   (*>
-    (opt #'p:space)
-    parser)
-   (p:char #\])))
-
-(defun read-expr (name tag parser &key node-p sexp)
-  (let ((expr (*> (if tag
-                      (alt (sexp-atom name)
-                           (sexp-atom tag))
-                      (sexp-atom nil))
-                  #'p:space
-                  (if node-p
-                      (<*> (p:pure 'apply)
-                           (p:pure '(function make-instance))
-                           (p:pure (read-from-string
-                                    (format-parser "'~a" name)))
-                           parser)
-                      (<*> (p:pure name)
-                           parser)))))
-    (if sexp (sexp-read expr) expr)))
-
-(defmacro arg (name tag sexp &body parser)
-  `(<* (read-expr ,name ,tag ,@parser :node-p nil :sexp ,sexp)
-       #'p:space))
-
-(defmacro with-args (&body body)
-  `(remnil (interleave (<*> (p:pure 'list) ,@body))))
-
-(defun default-args ()
-  (p:count 2 (opt (alt (arg :metadata :meta t
-                         (<*> (p:pure 'make-meta)
-                              (many-x (read-pair) 'list)))
-                       (arg :reference :ref t
-                         (word))))))
-
-(defun recur ()
-  (opt (arg :children nil nil
-         (many-x (scrawl) 'list))))
-
-(defmacro node (name tag &body parser)
-  `(let ((&def (interleave (default-args)))
-         (&rec (recur)))
-     (read-expr ,name ,tag
-                (with-args ,@parser)
-                :node-p t :sexp t)))
-
-;; TODO: reference and meta args aren't being parsed correctly and
-;; are read as being part of the last text node
 (defun paragraph ()
-  (read-expr :paragraph (*> #'p:newline)
-             (with-args
-               (arg :children nil nil
-                 (many-x (*> (*> (opt #'p:newline)
-                                 (peek (any-but #\newline)))
-                             (scrawl))
-                         'list))
-               (interleave (default-args)))
-             :node-p t :sexp nil))
+  (<* (p:ap (lambda (children)
+              `(paragraph :children ,children))
+            (inline))
+      (blank-line)))
 
-(defun text ()
-  (read-expr :text-node (opt #'p:newline)
-             (with-args
-               (arg :text nil nil
-                 (take-string))
-               (interleave (default-args)))
-             :node-p t :sexp nil))
+(defun scrawl/body ()
+  (p:many (*> (p:not (p:alt (scrawl (p:char #\#))
+                            (p:char #\])))
+              (p:alt (scrawl)
+                     (paragraph)))))
 
-(defun scrawl ()
-  (alt (node :section #\#
-         (arg :title nil nil
-           (take-text))
-         &def &rec)
-       (node :subscript :sub
-         &def &rec)
-       (node :superscript :sup
-         &def &rec)
-       (node :image :img
-         &def &rec)
-       (node :figure :fig
-         &def &rec)
-       (node :bold #\*
-         &def &rec)
-       (node :italic #\/
-         &def &rec)
-       (node :code #\%
-         &def &rec)
-       (node :code-block #\$
-         &def &rec)
-       (node :block-quote #\>
-         &def &rec)
-       (node :inline-quote #\<
-         &def &rec)
-       (node :underline #\_
-         &def &rec)
-       (node :strikethrough #\~
-         &def &rec)
-       (paragraph)
-       (text)))
+(defun scrawl/object (&optional atom)
+  (lambda (offset)
+    (bind (<* (if atom atom (take-word))
+              #'p:multispace1)
+        (offset result)
+      (let ((a (if (zerop (length result))
+                   (aref result 0)
+                   (read-from-string result))))
+        (case a
+          ((or #\* #\/ #\% #\_ #\~)
+           (scrawl/markup a))
+          (#\# (section))
+          (#\* (markup 'bold))
+          (#\/ (markup 'italic))
+          (#\% (markup 'code))
+          (#\_ (markup 'underline))
+          (#\~ (markup 'strikethrough))
+          (#\$ (code-block))
+          (#\> (block-quote))
+          (#\< (inline-quote))
+          (t (scrawl/key a)))))))
+
+(defun scrawl (&optional atom)
+  (p:between
+   (p:char #\[)
+   (p:alt (*> (p:char #\[)
+              (scrawl))
+          (if char (scrawl/object char)
+              (scrawl/object)))
+   (p:char #\])))
 
 
 ;;;; interface --------------------------------------------------------
