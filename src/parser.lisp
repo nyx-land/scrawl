@@ -239,6 +239,110 @@
               (scrawl/object)))
    (p:char #\])))
 
+(defmacro charr (&rest chars)
+  `(let* ((chars (sort (mapcar #'char-code ',chars) #'>))
+          (out (make-array (1+ (car chars)) :initial-element nil)))
+     (loop for c in chars
+           do (setf (aref out c) t))
+     out))
+
+(defmacro charswitch (&rest chars)
+  `(lambda (in)
+     (or ,@(mapcar (lambda (c)
+                     `(position ,c in))
+                   chars))))
+
+(defconstant +whitespace+
+  (charr
+   #\space #\tab #\return #\newline))
+
+(defun any-of (chars)
+  (lambda (c)
+    (let ((cc (char-code c)))
+      (and (< (length chars))
+           (aref chars cc)))))
+
+(defun not-of (chars)
+  (lambda (c)
+    (let ((cc (char-code c)))
+      (or (> cc (length chars))
+          (not (aref chars cc))))))
+
+(defun make-syntax (&rest objects)
+  (let ((out (make-hash-table)))
+    (loop for x in objects
+          as class = (car x)
+          as constructors = (cdr x)
+          do (mapcar (lambda (y)
+                       (setf (gethash y out) class))
+                     constructors))
+    out))
+
+(defvar *syntax*
+  (make-syntax
+    '(heading #\# :heading)))
+
+(defun consume (chars)
+  (lambda (in)
+    (loop for c across in
+          as i = 0 then (incf i)
+          until (funcall (not-of chars) c)
+          finally (return (subseq in i)))))
+
+(defun ws-consume ()
+  (consume +whitespace+))
+
+(defun whitespace-p (c)
+  (let ((cc (char-code c)))
+    (and (< cc (length +whitespace+))
+         (aref +whitespace+ cc))))
+
+(defun ws-next (in)
+  (funcall (charswitch
+            #\space #\return
+            #\newline #\tab)
+           in))
+
+(defun read-key (in)
+  (let ((fc (aref in 0))
+        (ws (ws-next in)))
+    (when (and (char= fc #\:) ws)
+      (let ((string (subseq in 1 ws)))
+        (values
+         (intern (string-upcase string)
+                 :keyword)
+         (funcall (ws-consume)
+                  (subseq in (1+ (length string)))))))))
+
+(defun read-class (a)
+  (let ((fc (char a 0))
+        (sc (char a 1)))
+    (if (and fc (whitespace-p sc))
+        (gethash fc *syntax*)
+        (multiple-value-bind (key rest) (read-key a)
+          (if key (values (gethash key *syntax*)
+                          rest)
+              nil)))))
+
+(defun read-slots (in)
+  ())
+
+
+(defun sexp (in)
+  (let* ((start (subseq in (1+ (position #\[ in))))
+         (first-el (funcall (ws-consume) start))
+         (class (read-class first-el)))
+    (if class
+        `(make-instance
+          ',class
+          ,@(funcall #'read-slots 
+                     (consume-key in class))
+          :body )
+        )))
+
+(defun parse (parser in)
+  (funcall #'sexp in))
+
 
 ;;;; interface --------------------------------------------------------
 
